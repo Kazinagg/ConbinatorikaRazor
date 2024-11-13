@@ -1,0 +1,281 @@
+﻿@page "/l5"
+@using System.ComponentModel
+@inject IJSRuntime JS
+
+<div>
+    <h3>Выбор способа задания графа:</h3>
+    <input type="checkbox" @bind="IsManualInput" /> Ручной ввод
+
+    @if (IsManualInput)
+    {
+        <div>
+            <label for="matrixSize">Размер матрицы смежности:</label>
+            <input type="number" id="matrixSize" @bind="MatrixSize" min="2" @oninput="MatrixSizeChanged" />
+        </div>
+        <table class="table">
+            <thead>
+                <tr>
+                    @for (int i = 1; i < MatrixSize+1; i++)
+                    {
+                        <th>@i</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @for (int i = 0; i < MatrixSize; i++)
+                {
+                    int rowIndex = i;
+                    <tr>
+                        @for (int j = 0; j < MatrixSize; j++)
+                        {
+                            int columnIndex = j;
+                            <td>
+                                @if (i == j)
+                                {
+                                    <input type="checkbox" disabled checked="@(GetMatrixValue(i, j) == 1)" />
+                                }
+                                else
+                                {
+                                    <input type="checkbox" @onchange="@((args) => UpdateMatrix(rowIndex, columnIndex, (bool)args.Value))" />
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <button class="btn btn-primary" @onclick="SaveMatrix">Сохранить матрицу</button>
+    }
+    else
+    {
+        <div>
+            <label for="graphSize">Количество вершин в графе:</label>
+            <input type="number" id="graphSize" @bind="GraphSize" min="2" />
+        </div>
+        <button class="btn btn-primary" @onclick="GenerateGraph">Сгенерировать граф</button>
+    }
+    <h3>Граф:</h3>
+
+    <div id="graph" style="border: 1px solid black; width: 600px; height: 400px;"></div>
+    @if (Graph != null)
+    {
+        
+
+        <div>
+            <ul>
+                @for (int i = 0; i < Graph.Count; i++)
+                {
+                    <li>
+                        Вершина @(i+1):
+                        @if (Graph[i].Count > 0)
+                        {
+                            @string.Join(", ", Graph[i].Select(x => x + 1)) 
+                        }
+                        else
+                        {
+                            <span>нет смежных вершин</span>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+
+        <div>
+            <label for="startVertex">Начальная вершина:</label>
+            <input type="number" id="startVertex" @bind="StartVertex" min="1" max="@MatrixSize" />
+        </div>
+        <div>
+            <label>
+                <input type="radio" name="traversalMethod" @onchange="@((e) => IsDepthFirst = true)" checked="@IsDepthFirst" /> В глубину
+            </label>
+            <label>
+                <input type="radio" name="traversalMethod" @onchange="@((e) => IsDepthFirst = false)" checked="!IsDepthFirst" /> В ширину
+            </label>
+        </div>
+        <button class="btn btn-primary" @onclick="TraverseGraph">Пройтись</button>
+
+        @if (TraversalResult != null)
+        {
+            <h3>Результат обхода:</h3>
+            <ul>
+                @foreach (var vertex in TraversalResult)
+                {
+                    <li>@(vertex+1)</li>
+                }
+            </ul>
+        }
+    }
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.20.0/cytoscape.min.js"></script>
+<script src="js/graph.js"></script>
+
+@code {
+    private bool IsManualInput { get; set; }
+    private int MatrixSize { get; set; } = 5;
+    private int GraphSize { get; set; } = 5;
+    private List<List<int>> AdjacencyMatrix { get; set; } = new List<List<int>>();
+    private List<List<int>> Graph { get; set; }
+    private int StartVertex { get; set; } = 1;
+    private bool IsDepthFirst { get; set; }
+    private List<int> TraversalResult { get; set; }
+
+    protected override void OnInitialized()
+    {
+        InitializeMatrix(MatrixSize);
+    }
+
+    private void InitializeMatrix(int size)
+    {
+        AdjacencyMatrix = new List<List<int>>(size);
+        for (int i = 0; i < size; i++)
+        {
+            AdjacencyMatrix.Add(Enumerable.Repeat(0, size).ToList());
+        }
+    }
+
+    private void MatrixSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int newSize))
+        {
+            MatrixSize = newSize;
+            InitializeMatrix(MatrixSize);
+        }
+    }
+
+    private int GetMatrixValue(int row, int col)
+    {
+        if (row >= 0 && row < AdjacencyMatrix.Count && col >= 0 && col < AdjacencyMatrix[row].Count)
+        {
+            return AdjacencyMatrix[row][col];
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    private void UpdateMatrix(int row, int col, bool value)
+    {
+        if (row >= 0 && row < AdjacencyMatrix.Count && col >= 0 && col < AdjacencyMatrix[row].Count)
+        {
+            AdjacencyMatrix[row][col] = value ? 1 : 0;
+        }
+    }
+
+    private async Task GenerateGraph()
+    {
+        // Создаем матрицу смежности GraphSize x GraphSize, заполненную пустыми списками
+        Graph = new List<List<int>>();
+        for (int i = 0; i < GraphSize; i++)
+        {
+            Graph.Add(new List<int>());
+        }
+
+        // Генерируем случайные связи между вершинами
+        Random random = new Random();
+        for (int i = 0; i < GraphSize; i++)
+        {
+            for (int j = i + 1; j < GraphSize; j++) // Проходим только по верхней треугольной матрице
+            {
+                // Исключаем петли (ребра из вершины в себя)
+                if (i != j)
+                {
+                    // С вероятностью 50% создаем ребро между вершинами i и j
+                    if (random.Next(2) == 0)
+                    {
+                        // Добавляем смежные вершины в списки смежности
+                        Graph[i].Add(j);
+                        Graph[j].Add(i);
+                    }
+                }
+            }
+        }
+        await InvokeGraphDraw();
+    }
+
+    private async Task SaveMatrix()
+    {
+        Graph = new List<List<int>>();
+        for (int i = 0; i < MatrixSize; i++)
+        {
+            Graph.Add(new List<int>());
+            for (int j = 0; j < MatrixSize; j++)
+            {
+                if (AdjacencyMatrix[i][j] != 0)
+                {
+                    Graph[i].Add(j);
+                }
+            }
+        }
+        await InvokeGraphDraw();
+    }
+
+    private async Task InvokeGraphDraw()
+    {
+        var nodes = Graph.Select((adj, i) => new { id = (i + 1).ToString() }).ToArray();
+        var edges = new List<object>();
+        for (int i = 0; i < Graph.Count; i++)
+        {
+            foreach (var j in Graph[i])
+            {
+                if (i < j)
+                {
+                    edges.Add(new { source = (i + 1).ToString(), target = (j + 1).ToString() });
+                }
+            }
+        }
+
+        await JS.InvokeVoidAsync("drawGraph", nodes, edges);
+    }
+
+    private void TraverseGraph()
+    {
+        TraversalResult = new List<int>();
+        if (IsDepthFirst)
+        {
+            DepthFirstSearch(StartVertex-1);
+        }
+        else
+        {
+            BreadthFirstSearch(StartVertex-1);
+        }
+    }
+
+    private void DepthFirstSearch(int vertex)
+    {
+        TraversalResult.Add(vertex);
+        foreach (var neighbor in Graph[vertex])
+        {
+            if (!TraversalResult.Contains(neighbor))
+            {
+                DepthFirstSearch(neighbor);
+            }
+        }
+    }
+
+    private void BreadthFirstSearch(int startVertex)
+    {
+        var visited = new bool[Graph.Count];
+        var queue = new Queue<int>();
+
+        visited[startVertex] = true;
+        queue.Enqueue(startVertex);
+
+        while (queue.Count > 0)
+        {
+            var vertex = queue.Dequeue();
+            TraversalResult.Add(vertex);
+
+            foreach (var neighbor in Graph[vertex])
+            {
+                if (!visited[neighbor])
+                {
+                    visited[neighbor] = true;
+                    queue.Enqueue(neighbor);
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,102 @@
+﻿@page "/l2"
+
+<h3>Сочетания</h3>
+
+<EditForm Model="@formData" OnValidSubmit="@HandleValidSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label for="arraySize">Размер массива:</label>
+        <InputNumber id="arraySize" @bind-Value="formData.ArraySize" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label for="sampleSize">Размер выборки:</label>
+        <InputNumber id="sampleSize" @bind-Value="formData.SampleSize" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <InputCheckbox id="withRepetitions" @bind-Value="formData.WithRepetitions" />
+        <label for="withRepetitions">С повторениями</label>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Вычислить</button>
+</EditForm>
+
+@if (combinations != null)
+{
+    <h4>Результаты:</h4>
+    <ul>
+        @foreach (var combination in combinations)
+        {
+            <li>@string.Join(", ", combination)</li>
+        }
+    </ul>
+}
+
+@code {
+    private FormData formData = new FormData();
+    private List<int[]>? combinations;
+
+    private class FormData
+    {
+        public int ArraySize { get; set; } = 5;
+        public int SampleSize { get; set; } = 3;
+        public bool WithRepetitions { get; set; } = false;
+    }
+
+    private void HandleValidSubmit()
+    {
+        combinations = formData.WithRepetitions ?
+            GetCombinationsWithRepetitions(formData.ArraySize, formData.SampleSize) :
+            GetCombinationsWithoutRepetitions(formData.ArraySize, formData.SampleSize);
+    }
+
+    private List<int[]> GetCombinationsWithRepetitions(int n, int k)
+    {
+        List<int[]> result = new List<int[]>();
+        int[] combination = new int[k];
+        GenerateCombinationsWithRepetitions(result, combination, n, k, 0, 0);
+        return result;
+    }
+
+    private void GenerateCombinationsWithRepetitions(List<int[]> result, int[] combination, int n, int k, int index, int start)
+    {
+        if (index == k)
+        {
+            result.Add((int[])combination.Clone());
+            return;
+        }
+
+        for (int i = start; i < n; i++)
+        {
+            combination[index] = i;
+            GenerateCombinationsWithRepetitions(result, combination, n, k, index + 1, i); // i передается как следующий старт
+        }
+    }
+
+
+    private List<int[]> GetCombinationsWithoutRepetitions(int n, int k)
+    {
+        List<int[]> result = new List<int[]>();
+        int[] combination = new int[k];
+        GenerateCombinationsWithoutRepetitions(result, combination, n, k, 0, 0);
+        return result;
+    }
+
+    private void GenerateCombinationsWithoutRepetitions(List<int[]> result, int[] combination, int n, int k, int index, int start)
+    {
+        if (index == k)
+        {
+            result.Add((int[])combination.Clone());
+            return;
+        }
+
+        for (int i = start; i < n; i++)
+        {
+            combination[index] = i;
+            GenerateCombinationsWithoutRepetitions(result, combination, n, k, index + 1, i + 1);
+        }
+    }
+}

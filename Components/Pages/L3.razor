@@ -1,0 +1,107 @@
+﻿@page "/l3"
+
+<h3>Размещения</h3>
+
+<EditForm Model="@formData" OnValidSubmit="@HandleValidSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label for="arraySize">Размер массива:</label>
+        <InputNumber id="arraySize" @bind-Value="formData.ArraySize" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label for="sampleSize">Размер выборки:</label>
+        <InputNumber id="sampleSize" @bind-Value="formData.SampleSize" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <InputCheckbox id="withRepetitions" @bind-Value="formData.WithRepetitions" />
+        <label for="withRepetitions">С повторениями</label>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Вычислить</button>
+</EditForm>
+
+@if (arrangements != null)
+{
+    <h4>Результаты:</h4>
+    <ul>
+        @foreach (var arrangement in arrangements)
+        {
+            <li>@string.Join(", ", arrangement)</li>
+        }
+    </ul>
+}
+
+@code {
+    private FormData formData = new FormData();
+    private List<int[]>? arrangements;
+
+    private class FormData
+    {
+        public int ArraySize { get; set; } = 5;
+        public int SampleSize { get; set; } = 3;
+        public bool WithRepetitions { get; set; } = false;
+    }
+
+    private void HandleValidSubmit()
+    {
+        arrangements = formData.WithRepetitions ?
+            GetArrangementsWithRepetitions(formData.ArraySize, formData.SampleSize) :
+            GetArrangementsWithoutRepetitions(formData.ArraySize, formData.SampleSize);
+    }
+
+    private List<int[]> GetArrangementsWithRepetitions(int n, int k)
+    {
+        List<int[]> result = new List<int[]>();
+        int[] arrangement = new int[k];
+        GenerateArrangementsWithRepetitions(result, arrangement, n, k, 0);
+        return result;
+    }
+
+    private void GenerateArrangementsWithRepetitions(List<int[]> result, int[] arrangement, int n, int k, int index)
+    {
+        if (index == k)
+        {
+            result.Add((int[])arrangement.Clone());
+            return;
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            arrangement[index] = i;
+            GenerateArrangementsWithRepetitions(result, arrangement, n, k, index + 1);
+        }
+    }
+
+    private List<int[]> GetArrangementsWithoutRepetitions(int n, int k)
+    {
+        List<int[]> result = new List<int[]>();
+        int[] arrangement = new int[k];
+        bool[] used = new bool[n];
+        GenerateArrangementsWithoutRepetitions(result, arrangement, used, n, k, 0);
+        return result;
+    }
+
+    private void GenerateArrangementsWithoutRepetitions(List<int[]> result, int[] arrangement, bool[] used, int n, int k, int index)
+    {
+        if (index == k)
+        {
+            result.Add((int[])arrangement.Clone());
+            return;
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            if (!used[i])
+            {
+                arrangement[index] = i;
+                used[i] = true;
+                GenerateArrangementsWithoutRepetitions(result, arrangement, used, n, k, index + 1);
+                used[i] = false;
+            }
+        }
+    }
+}

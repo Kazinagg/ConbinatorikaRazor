@@ -1,0 +1,38 @@
+﻿body {
+}
+.content-panel {
+    padding: 30px 20px;
+}
+
+.lab-frame {
+    border-radius: 10px;
+    padding: 20px;
+    background-color: rgba(18, 33, 33, 0);
+}
+
+.input-entry {
+    display: block;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.generate-button {
+    border-radius: 5px;
+    padding: 10px;
+    cursor: pointer;
+}
+
+.scroll-output {
+    margin-top: 20px;
+    overflow-y: auto;
+}
+
+.permutations-output {
+    margin: 0;
+}

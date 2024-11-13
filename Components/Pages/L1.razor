@@ -1,0 +1,133 @@
+﻿@page "/"
+
+<div>
+    <div class="content-panel">
+        <div class="lab-content">
+            <div class="lab-frame">
+                <h3>Лабораторная работа 1</h3>
+                <input type="number" placeholder="Введите размер массива" class="input-entry" @bind="ArraySizeEntry" />
+                <div class="checkbox-container">
+                    <input type="checkbox" id="allowRepetitions" @bind="AllowRepetitions" />
+                    <label for="allowRepetitions">Разрешить повторения</label>
+                </div>
+                <input type="text" placeholder="Введите количество объектов каждого типа через запятую"
+                       class="input-entry" @bind="ElementsEntry" disabled="@(!AllowRepetitions)" />
+
+                <button class="generate-button" @onclick="GeneratePermutationsClicked">Сгенерировать перестановки</button>
+                <div class="scroll-output">
+                    <textarea class="permutations-output" readonly>@PermutationsOutput</textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int? ArraySizeEntry; // Изменено на int? для числового поля
+    private bool AllowRepetitions = false;
+    private string ElementsEntry;
+    private string PermutationsOutput = string.Empty;
+
+    private void GeneratePermutationsClicked()
+    {
+        if (ArraySizeEntry.HasValue && ArraySizeEntry.Value > 0)
+        {
+            IEnumerable<int[]> permutations;
+            if (AllowRepetitions)
+            {
+                // Получаем количество объектов каждого типа из ElementsEntry
+                if (!TryGetElementsWithRepetitions(ElementsEntry, out int[] elements))
+                {
+                    PermutationsOutput = "Неверный формат ввода для количества объектов";
+                    return;
+                }
+
+                if (elements.Sum() != ArraySizeEntry.Value)
+                {
+                    PermutationsOutput = "Сумма количества объектов должна равняться размеру массива";
+                    return;
+                }
+
+                permutations = GetPermutationsWithRepetitions(Enumerable.Range(1, elements.Length).ToArray(), elements);
+            }
+            else
+            {
+                permutations = GetPermutations(Enumerable.Range(1, ArraySizeEntry.Value).ToArray());
+            }
+            PermutationsOutput = string.Join("\n", permutations.Select(p => string.Join(" ", p)));
+        }
+        else
+        {
+            PermutationsOutput = "Некорректный размер массива";
+        }
+    }
+
+    // Метод для генерации всех перестановок массива
+    private static IEnumerable<T[]> GetPermutations<T>(T[] array)
+    {
+        if (array.Length == 1)
+        {
+            yield return array;
+        }
+        else
+        {
+            for (int i = 0; i < array.Length; i++)
+            {
+                foreach (var permutation in GetPermutations(array.Where((x, j) => j != i).ToArray()))
+                {
+                    yield return new[] { array[i] }.Concat(permutation).ToArray();
+                }
+            }
+        }
+    }
+
+    public static List<int[]> GetPermutationsWithRepetitions(int[] elements, int[] repetitions)
+    {
+        if (elements.Length != repetitions.Length)
+        {
+            throw new ArgumentException("Количество элементов и повторений должно совпадать.");
+        }
+
+        var result = new List<int[]>();
+        GetPermutationsRecursive(elements, repetitions, new int[repetitions.Sum()], 0, result);
+        return result;
+    }
+
+    private static void GetPermutationsRecursive(int[] elements, int[] repetitions, int[] currentPermutation, int position, List<int[]> result)
+    {
+        if (position == currentPermutation.Length)
+        {
+            result.Add(currentPermutation.ToArray());
+            return;
+        }
+
+        for (int i = 0; i < elements.Length; i++)
+        {
+            if (repetitions[i] > 0)
+            {
+                currentPermutation[position] = elements[i];
+                repetitions[i]--;
+                GetPermutationsRecursive(elements, repetitions.ToArray(), currentPermutation, position + 1, result);
+                repetitions[i]++;
+            }
+        }
+    }
+
+    private bool TryGetElementsWithRepetitions(string text, out int[] elements)
+    {
+        elements = null;
+        if (string.IsNullOrEmpty(text)) return false;
+
+        try
+        {
+            elements = text.Split(',')
+                           .Select(s => int.Parse(s.Trim()))
+                           .ToArray();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+}

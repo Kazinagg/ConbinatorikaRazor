@@ -1,0 +1,166 @@
+﻿@page "/l4"
+
+@using System.ComponentModel
+
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
+            <h3 class="text-center mb-3">Выберите алгоритм:</h3>
+
+            <div class="form-check">
+                <input type="radio" class="form-check-input" name="sieveType" value="@SieveType.Eratosthenes" checked @onchange="@((ChangeEventArgs e) => HandleSieveTypeChange(e))" />
+                <label class="form-check-label">Решето Эратосфена</label>
+            </div>
+            <div class="form-check">
+                <input type="radio" class="form-check-input" name="sieveType" value="@SieveType.Sundaram" @onchange="@((ChangeEventArgs e) => HandleSieveTypeChange(e))" />
+                <label class="form-check-label">Решето Саундарама</label>
+            </div>
+            <div class="form-check">
+                <input type="radio" class="form-check-input" name="sieveType" value="@SieveType.Atkin" @onchange="@((ChangeEventArgs e) => HandleSieveTypeChange(e))" />
+                <label class="form-check-label">Решето Аткина</label>
+            </div>
+
+            <div class="form-group mt-3">
+                <label for="maxValue">Введите число:</label>
+                <input type="number" class="form-control" id="maxValue" @bind-value="maxValue" />
+            </div>
+
+            <button class="btn btn-primary mt-3" @onclick="CalculatePrimes">Вычислить</button>
+
+            @if (primes.Any())
+            {
+                <p class="mt-3">Результат: @string.Join(", ", primes)</p>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private int maxValue = 100;
+    private List<int> primesEratosthenes = new List<int>();
+    private List<int> primesSundaram = new List<int>();
+    private List<int> primesAtkin = new List<int>();
+
+    // private int maxValue = 100;
+    private List<int> primes = new List<int>();
+    private SieveType selectedSieveType = SieveType.Eratosthenes;
+
+    private enum SieveType
+    {
+        Eratosthenes,
+        Sundaram,
+        Atkin
+    }
+
+    private void CalculatePrimes()
+    {
+        switch (selectedSieveType)
+        {
+            case SieveType.Eratosthenes:
+                primes = SieveOfEratosthenes(maxValue);
+                break;
+            case SieveType.Sundaram:
+                primes = SieveOfSundaram(maxValue);
+                break;
+            case SieveType.Atkin:
+                primes = SieveOfAtkin(maxValue);
+                break;
+        }
+    }
+
+    private void HandleSieveTypeChange(ChangeEventArgs e)
+    {
+        selectedSieveType = (SieveType)Enum.Parse(typeof(SieveType), e.Value.ToString());
+    }
+
+    // Решето Эратосфена
+    private List<int> SieveOfEratosthenes(int n)
+    {
+        bool[] isPrime = new bool[n + 1];
+        Array.Fill(isPrime, true);
+
+        for (int p = 2; p * p <= n; p++)
+        {
+            if (isPrime[p])
+            {
+                for (int i = p * p; i <= n; i += p)
+                    isPrime[i] = false;
+            }
+        }
+
+        List<int> primes = new List<int>();
+        for (int i = 2; i <= n; i++)
+        {
+            if (isPrime[i])
+                primes.Add(i);
+        }
+
+        return primes;
+    }
+
+    // Решето Сундарама
+    private List<int> SieveOfSundaram(int n)
+    {
+        int k = (n - 2) / 2;
+        bool[] isPrime = new bool[k + 1];
+        Array.Fill(isPrime, true);
+
+        for (int i = 1; i <= k; i++)
+        {
+            for (int j = i; (i + j + 2 * i * j) <= k; j++)
+                isPrime[i + j + 2 * i * j] = false;
+        }
+
+        List<int> primes = new List<int>() { 2 };
+        for (int i = 1; i <= k; i++)
+        {
+            if (isPrime[i])
+                primes.Add(2 * i + 1);
+        }
+
+        return primes;
+    }
+
+    // Решето Аткина
+    private List<int> SieveOfAtkin(int n)
+    {
+        bool[] isPrime = new bool[n + 1];
+        int sqrtN = (int)Math.Sqrt(n);
+
+        for (int x = 1; x <= sqrtN; x++)
+        {
+            for (int y = 1; y <= sqrtN; y++)
+            {
+                int num1 = 4 * x * x + y * y;
+                if (num1 <= n && (num1 % 12 == 1 || num1 % 12 == 5))
+                    isPrime[num1] = !isPrime[num1];
+
+                int num2 = 3 * x * x + y * y;
+                if (num2 <= n && num2 % 12 == 7)
+                    isPrime[num2] = !isPrime[num2];
+
+                int num3 = 3 * x * x - y * y;
+                if (x > y && num3 <= n && num3 % 12 == 11)
+                    isPrime[num3] = !isPrime[num3];
+            }
+        }
+
+        for (int i = 5; i <= sqrtN; i++)
+        {
+            if (isPrime[i])
+            {
+                for (int j = i * i; j <= n; j += i * i)
+                    isPrime[j] = false;
+            }
+        }
+
+        List<int> primes = new List<int>() { 2, 3 };
+        for (int i = 5; i <= n; i++)
+        {
+            if (isPrime[i])
+                primes.Add(i);
+        }
+
+        return primes;
+    }
+}

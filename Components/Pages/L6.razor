@@ -1,0 +1,376 @@
+﻿@page "/l6"
+@using System.ComponentModel
+@inject IJSRuntime JS
+
+<div>
+    <h3>Выбор способа задания графа:</h3>
+    <input type="checkbox" @bind="IsManualInput" /> Ручной ввод
+
+    @if (IsManualInput)
+    {
+        <div>
+            <label for="matrixSize">Размер матрицы смежности:</label>
+            <input type="number" id="matrixSize" @bind="MatrixSize" min="2" @oninput="MatrixSizeChanged" />
+        </div>
+        <table class="table">
+            <thead>
+                <tr>
+                    @for (int i = 1; i < MatrixSize + 1; i++)
+                    {
+                        <th>@i</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @for (int i = 0; i < MatrixSize; i++)
+                {
+                    int rowIndex = i;
+                    <tr>
+                        @for (int j = 0; j < MatrixSize; j++)
+                        {
+                            int columnIndex = j;
+                            <td>
+                                @if (i != j)
+                                {
+                                    <input type="checkbox" @onchange="@((args) => UpdateMatrix(rowIndex, columnIndex, (bool)args.Value))" />
+                                    <input type="number" @bind="EdgeWeights[rowIndex][columnIndex]" disabled="@(AdjacencyMatrix[rowIndex][columnIndex] == 0)" min="1" />
+                                }
+                                else
+                                {
+                                    <input type="checkbox" disabled checked />
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <button class="btn btn-primary" @onclick="SaveMatrix">Сохранить матрицу</button>
+    }
+    else
+    {
+        <div>
+            <label for="graphSize">Количество вершин в графе:</label>
+            <input type="number" id="graphSize" @bind="GraphSize" min="2" />
+        </div>
+        <button class="btn btn-primary" @onclick="GenerateGraph">Сгенерировать граф</button>
+    }
+
+    <h3>Граф:</h3>
+    <div id="graph" style="border: 1px solid black; width: 600px; height: 400px;"></div>
+    @if (Graph != null)
+    {
+
+
+        <div>
+            <ul>
+                @for (int i = 0; i < Graph.Count; i++)
+                {
+                    <li>
+                        Вершина @(i + 1):
+                        @if (Graph[i].Count > 0)
+                        {
+                            @string.Join(", ", Graph[i].Select(x => x + 1))
+                        }
+                        else
+                        {
+                            <span>нет смежных вершин</span>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+
+        <div>
+            <label for="startVertex">Начальная вершина (для Дейкстры):</label>
+            <input type="number" id="startVertex" @bind="StartVertex" min="1" max="@MatrixSize" />
+        </div>
+
+        <div>
+            <button class="btn btn-primary" @onclick="RunDijkstra">Дейкстра</button>
+            <button class="btn btn-primary" @onclick="RunFloydWarshall">Флойд-Уоршелл</button>
+        </div>
+
+        @if (DijkstraResult != null)
+        {
+            <h3>Результат Дейкстры (кратчайшие расстояния от вершины @StartVertex):</h3>
+            <ul>
+                @for (int i = 0; i < DijkstraResult.Length; i++)
+                {
+                    <li>До вершины @(i + 1): @DijkstraResult[i]</li>
+                }
+            </ul>
+        }
+
+        @if (FloydWarshallResult != null)
+        {
+            <h3>Результат Флойда-Уоршелла (матрица кратчайших расстояний):</h3>
+            <table class="table">
+                <tbody>
+                    @for (int i = 0; i < FloydWarshallResult.GetLength(0); i++)
+                    {
+                        <tr>
+                            @for (int j = 0; j < FloydWarshallResult.GetLength(1); j++)
+                            {
+                                <td>@FloydWarshallResult[i, j]</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        @if (TraversalResult != null)
+        {
+            <h3>Результат обхода:</h3>
+            <ul>
+                @foreach (var vertex in TraversalResult)
+                {
+                    <li>@(vertex + 1)</li>
+                }
+            </ul>
+        }
+    }
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.20.0/cytoscape.min.js"></script>
+<script src="js/graph.js"></script>
+
+@code {
+    private bool IsManualInput { get; set; }
+    private int MatrixSize { get; set; } = 5;
+    private int GraphSize { get; set; } = 5;
+    private List<List<int>> AdjacencyMatrix { get; set; } = new List<List<int>>();
+    private List<List<int>> EdgeWeights { get; set; } = new List<List<int>>();
+    private List<List<int>> Graph { get; set; }
+    private int StartVertex { get; set; } = 1;
+    private bool IsDepthFirst { get; set; }
+    private List<int> TraversalResult { get; set; }
+    private int[] DijkstraResult { get; set; }
+    private int[,] FloydWarshallResult { get; set; }
+
+    protected override void OnInitialized()
+    {
+        InitializeMatrix(MatrixSize);
+    }
+
+    private void InitializeMatrix(int size)
+    {
+        AdjacencyMatrix = new List<List<int>>(size);
+        EdgeWeights = new List<List<int>>(size);
+        for (int i = 0; i < size; i++)
+        {
+            AdjacencyMatrix.Add(Enumerable.Repeat(0, size).ToList());
+            EdgeWeights.Add(Enumerable.Repeat(0, size).ToList());
+        }
+    }
+
+    private void MatrixSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int newSize))
+        {
+            MatrixSize = newSize;
+            InitializeMatrix(MatrixSize);
+        }
+    }
+
+    private int GetMatrixValue(int row, int col)
+    {
+        if (row >= 0 && row < AdjacencyMatrix.Count && col >= 0 && col < AdjacencyMatrix[row].Count)
+        {
+            return AdjacencyMatrix[row][col];
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    private void UpdateMatrix(int row, int col, bool value)
+    {
+        if (row >= 0 && row < AdjacencyMatrix.Count && col >= 0 && col < AdjacencyMatrix[row].Count)
+        {
+            AdjacencyMatrix[row][col] = value ? 1 : 0;
+        }
+    }
+
+    private async Task GenerateGraph()
+    {
+        Graph = new List<List<int>>();
+        EdgeWeights = new List<List<int>>();
+
+        Random random = new Random();
+        for (int i = 0; i < GraphSize; i++)
+        {
+            Graph.Add(new List<int>());
+            EdgeWeights.Add(new List<int>());
+            for (int j = 0; j < GraphSize; j++)
+            {
+                EdgeWeights[i].Add(0);
+            }
+
+        }
+
+        for (int i = 0; i < GraphSize; i++)
+        {
+            for (int j = i + 1; j < GraphSize; j++)
+            {
+                if (random.Next(2) == 0)
+                {
+                    Graph[i].Add(j);
+                    Graph[j].Add(i);
+                    int weight = random.Next(1, 11); // Вес от 1 до 10
+                    EdgeWeights[i][j] = weight;
+                    EdgeWeights[j][i] = weight;
+                }
+            }
+        }
+
+
+        await InvokeGraphDraw();
+    }
+
+    private async Task SaveMatrix()
+    {
+        Graph = new List<List<int>>();
+        for (int i = 0; i < MatrixSize; i++)
+        {
+            Graph.Add(new List<int>());
+            for (int j = 0; j < MatrixSize; j++)
+            {
+                if (AdjacencyMatrix[i][j] != 0)
+                {
+                    Graph[i].Add(j);
+                }
+            }
+        }
+        await InvokeGraphDraw();
+    }
+
+    private async Task InvokeGraphDraw()
+    {
+        var nodes = Graph.Select((adj, i) => new { id = (i + 1).ToString() }).ToArray();
+        var edges = new List<object>();
+        for (int i = 0; i < Graph.Count; i++)
+        {
+            foreach (var j in Graph[i])
+            {
+                if (i < j)
+                {
+                    edges.Add(new { source = (i + 1).ToString(), target = (j + 1).ToString(), weight = EdgeWeights[i][j] }); // Include weight here.
+                }
+            }
+        }
+
+        await JS.InvokeVoidAsync("drawGraph", nodes, edges);
+    }
+
+        private void RunDijkstra()
+        {
+            DijkstraResult = Dijkstra(Graph, EdgeWeights, StartVertex - 1);
+        }
+
+        private void RunFloydWarshall()
+        {
+            FloydWarshallResult = FloydWarshall(Graph, EdgeWeights);
+        }
+
+
+        private int[] Dijkstra(List<List<int>> graph, List<List<int>> weights, int startNode)
+        {
+            int n = graph.Count;
+            int[] dist = Enumerable.Repeat(int.MaxValue, n).ToArray();
+            bool[] visited = new bool[n];
+            dist[startNode] = 0;
+
+            for (int count = 0; count < n - 1; count++)
+            {
+                int minDist = int.MaxValue, minIndex = -1;
+                for (int v = 0; v < n; v++)
+                {
+                    if (!visited[v] && dist[v] <= minDist)
+                    {
+                        minDist = dist[v];
+                        minIndex = v;
+                    }
+                }
+
+
+                if (minIndex == -1) break;
+                visited[minIndex] = true;
+
+
+                for (int v = 0; v < graph[minIndex].Count; v++)
+                {
+                    int neighbor = graph[minIndex][v];
+
+                    int weight = weights[minIndex][neighbor];
+
+                    if (!visited[neighbor] && dist[minIndex] != int.MaxValue &&
+                    dist[minIndex] + weight < dist[neighbor])
+
+                        dist[neighbor] = dist[minIndex] + weight;
+
+
+                }
+            }
+
+
+            return dist;
+
+
+        }
+
+        private int[,] FloydWarshall(List<List<int>> graph, List<List<int>> weights)
+        {
+
+            int n = graph.Count;
+
+            int[,] dist = new int[n, n];
+
+            for (int i = 0; i < n; i++)
+
+                for (int j = 0; j < n; j++)
+
+                { dist[i, j] = (i == j) ? 0 : int.MaxValue; }
+
+
+
+
+            for (int i = 0; i < n; i++)
+
+            {
+
+                for (int j = 0; j < graph[i].Count; j++)
+
+                {
+
+                    int neighbor = graph[i][j];
+
+                    dist[i, neighbor] = weights[i][neighbor];
+
+                }
+
+            }
+
+
+            for (int k = 0; k < n; k++)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    for (int j = 0; j < n; j++)
+                    {
+                        if (dist[i, k] != int.MaxValue && dist[k, j] != int.MaxValue &&
+                            dist[i, k] + dist[k, j] < dist[i, j])
+                        {
+                            dist[i, j] = dist[i, k] + dist[k, j];
+                        }
+                    }
+                }
+            }
+
+
+
+            return dist;
+        }
+}
