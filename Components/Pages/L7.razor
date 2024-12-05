@@ -1,380 +1,440 @@
 ﻿@page "/l7"
-@using System.ComponentModel
+@using System.Text
+@using Microsoft.AspNetCore.Components.Forms
 @inject IJSRuntime JS
 
-<div>
-    <h3>Выбор способа задания графа:</h3>
-    <input type="checkbox" @bind="IsManualInput" /> Ручной ввод
+<div class="container mt-5">
+    <h3 class="mb-4">Демонстрация алгоритмов сжатия</h3>
 
-    @if (IsManualInput)
-    {
+    <!-- Выбор режима -->
+    <div class="mb-3">
+        <label class="form-label">Выберите режим:</label>
         <div>
-            <label for="matrixSize">Размер матрицы смежности:</label>
-            <input type="number" id="matrixSize" @bind="MatrixSize" min="2" @oninput="MatrixSizeChanged" />
+            <input type="radio" id="encoding" value="Encoding" @onchange="(e) => Mode = e.Value.ToString()" checked="@IsEncodingChecked" />
+            <label for="encoding">Кодировка</label>
         </div>
-        <table class="table">
-            <thead>
-                <tr>
-                    @for (int i = 1; i < MatrixSize + 1; i++)
-                    {
-                        <th>@i</th>
-                    }
-                </tr>
-            </thead>
-            <tbody>
-                @for (int i = 0; i < MatrixSize; i++)
-                {
-                    int rowIndex = i;
-                    <tr>
-                        @for (int j = 0; j < MatrixSize; j++)
-                        {
-                            int columnIndex = j;
-                            <td>
-                                @if (i != j)
-                                {
-                                    <input type="checkbox" @onchange="@((args) => UpdateMatrix(rowIndex, columnIndex, (bool)args.Value))" />
-                                    <input type="number" @bind="EdgeWeights[rowIndex][columnIndex]" disabled="@(AdjacencyMatrix[rowIndex][columnIndex] == 0)" min="1" />
-                                }
-                                else
-                                {
-                                    <input type="checkbox" disabled checked />
-                                }
-                            </td>
-                        }
-                    </tr>
-                }
-            </tbody>
-        </table>
-        <button class="btn btn-primary" @onclick="SaveMatrix">Сохранить матрицу</button>
+        <div>
+            <input type="radio" id="decoding" value="Decoding" @onchange="(e) => Mode = e.Value.ToString()" checked="@IsDecodingChecked" />
+            <label for="decoding">Декодировка</label>
+        </div>
+    </div>
+
+    <!-- Ввод текста -->
+    @if (Mode == "Encoding")
+    {
+        <div class="mb-3">
+            <label for="inputText" class="form-label">Введите текст:</label>
+            <textarea id="inputText" class="form-control" @bind="InputText" rows="5"></textarea>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Или загрузите файл:</label>
+            <InputFile OnChange="LoadFromFile" class="form-control" />
+        </div>
+
+        <!-- Выбор алгоритма -->
+        <div class="mb-3">
+            <label for="algorithm" class="form-label">Выберите алгоритм:</label>
+            <select id="algorithm" class="form-select" @bind="SelectedAlgorithm">
+                <option value="ShannonFano">Код Шеннона-Фано</option>
+                <option value="Huffman">Код Хаффмана</option>
+            </select>
+        </div>
     }
-    else
+    else if (Mode == "Decoding")
     {
-        <div>
-            <label for="graphSize">Количество вершин в графе:</label>
-            <input type="number" id="graphSize" @bind="GraphSize" min="2" />
+        <div class="mb-3">
+            <label for="inputText" class="form-label">Введите сжатый текст:</label>
+            <textarea id="inputText" class="form-control" @bind="InputText" rows="5"></textarea>
         </div>
-        <button class="btn btn-primary" @onclick="GenerateGraph">Сгенерировать граф</button>
+
+        <div class="mb-3">
+            <label class="form-label">Или загрузите файл:</label>
+            <InputFile OnChange="LoadFromFile" class="form-control" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Загрузить ключи:</label>
+            <InputFile OnChange="LoadKeysFromFile" class="form-control" />
+        </div>
     }
 
-    <h3>Граф:</h3>
-    <div id="graph" style="border: 1px solid black; width: 600px; height: 400px;"></div>
-    @if (Graph != null)
+    
+
+    <!-- Кнопки действий -->
+    @if (Mode == "Encoding")
     {
+        <button class="btn btn-primary me-2" @onclick="Compress">Сжать</button>
+        <button class="btn btn-secondary me-2" @onclick="SaveToFile">Сохранить битовый результат</button>
+        <button class="btn btn-warning me-2" @onclick="SaveBitSequenceAsText">Сохранить сжатый текст</button>
+        <button class="btn btn-secondary" @onclick="SaveKeysToFile">Сохранить ключи</button>
+    }
+    else if (Mode == "Decoding")
+    {
+        <button class="btn btn-success me-2" @onclick="Decode">Декодировать</button>
+    }
 
+    <!-- Результат -->
+    <div class="mt-4">
+        <h4>Результат:</h4>
+        <textarea readonly class="form-control" rows="5">@ResultText</textarea>
+    </div>
 
-        <div>
-            <ul>
-                @for (int i = 0; i < Graph.Count; i++)
-                {
-                    <li>
-                        Вершина @(i + 1):
-                        @if (Graph[i].Count > 0)
-                        {
-                            @string.Join(", ", Graph[i].Select(x => x + 1))
-                        }
-                        else
-                        {
-                            <span>нет смежных вершин</span>
-                        }
-                    </li>
-                }
-            </ul>
+    <!-- Дерево кодирования -->
+    @if (Mode == "Encoding")
+    {
+        <div class="mt-4">
+            <h4>Дерево кодирования:</h4>
+            <pre style="font-family: monospace;">@TreeVisualization</pre>
         </div>
-
-        <div>
-            <label for="startVertex">Начальная вершина (для Дейкстры):</label>
-            <input type="number" id="startVertex" @bind="StartVertex" min="1" max="@MatrixSize" />
-        </div>
-
-        <div>
-            <button class="btn btn-primary" @onclick="RunDijkstra">Дейкстра</button>
-            <button class="btn btn-primary" @onclick="RunFloydWarshall">Флойд-Уоршелл</button>
-        </div>
-
-        @if (DijkstraResult != null)
-        {
-            <h3>Результат Дейкстры (кратчайшие расстояния от вершины @StartVertex):</h3>
-            <ul>
-                @for (int i = 0; i < DijkstraResult.Length; i++)
-                {
-                    <li>До вершины @(i + 1): @(DijkstraResult[i] == 2147483647 ? "--" : DijkstraResult[i])</li>
-                }
-            </ul>
-        }
-
-        @if (FloydWarshallResult != null)
-        {
-            <h3>Результат Флойда-Уоршелла (матрица кратчайших расстояний):</h3>
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th></th>
-                        @for (int j = 0; j < FloydWarshallResult.GetLength(1); j++)
-                        {
-                            <th>@(j+1)</th>
-                        }
-                    </tr>
-                </thead>
-                <tbody>
-                    @for (int i = 0; i < FloydWarshallResult.GetLength(0); i++)
-                    {
-                        <tr>
-                            <th>@(i+1)</th>
-                            @for (int j = 0; j < FloydWarshallResult.GetLength(1); j++)
-                            {
-                                <td>@(FloydWarshallResult[i, j] == 2147483647 ? "--" : FloydWarshallResult[i, j])</td>
-                            }
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-        @if (TraversalResult != null)
-        {
-            <h3>Результат обхода:</h3>
-            <ul>
-                @foreach (var vertex in TraversalResult)
-                {
-                    <li>@(vertex + 1)</li>
-                }
-            </ul>
-        }
     }
 </div>
 
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.20.0/cytoscape.min.js"></script>
-<script src="js/graph.js"></script>
+
+<script>
+    function saveFile(filename, content) {
+        const blob = new Blob([content], { type: 'text/plain' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
 
 @code {
-    private bool IsManualInput { get; set; }
-    private int MatrixSize { get; set; } = 5;
-    private int GraphSize { get; set; } = 5;
-    private List<List<int>> AdjacencyMatrix { get; set; } = new List<List<int>>();
-    private List<List<int>> EdgeWeights { get; set; } = new List<List<int>>();
-    private List<List<int>> Graph { get; set; }
-    private int StartVertex { get; set; } = 1;
-    private bool IsDepthFirst { get; set; }
-    private List<int> TraversalResult { get; set; }
-    private int[] DijkstraResult { get; set; }
-    private int[,] FloydWarshallResult { get; set; }
+    private string Mode = "Encoding"; // Переменная для управления режимом
 
-    protected override void OnInitialized()
-    {
-        InitializeMatrix(MatrixSize);
-    }
+    private bool IsEncodingChecked => Mode == "Encoding";
+    private bool IsDecodingChecked => Mode == "Decoding";
+    private string InputText = string.Empty;
+    private string ResultText = string.Empty;
+    private string TreeVisualization = string.Empty;
+    private string SelectedAlgorithm = "ShannonFano";
+    private Dictionary<char, string> EncodingKeys = new();
+    private Dictionary<string, char> DecodingKeys = new();
 
-    private void InitializeMatrix(int size)
+    private async Task LoadFromFile(InputFileChangeEventArgs e)
     {
-        AdjacencyMatrix = new List<List<int>>(size);
-        EdgeWeights = new List<List<int>>(size);
-        for (int i = 0; i < size; i++)
+        var file = e.File;
+        if (file != null)
         {
-            AdjacencyMatrix.Add(Enumerable.Repeat(0, size).ToList());
-            EdgeWeights.Add(Enumerable.Repeat(0, size).ToList());
+            using var stream = file.OpenReadStream();
+            using var reader = new StreamReader(stream);
+            InputText = await reader.ReadToEndAsync();
         }
     }
 
-    private void MatrixSizeChanged(ChangeEventArgs e)
+    private void Compress()
     {
-        if (int.TryParse(e.Value?.ToString(), out int newSize))
+        if (string.IsNullOrEmpty(InputText))
         {
-            MatrixSize = newSize;
-            InitializeMatrix(MatrixSize);
+            ResultText = "Введите текст или загрузите файл!";
+            return;
+        }
+
+        if (SelectedAlgorithm == "ShannonFano")
+        {
+            (ResultText, TreeVisualization) = ShannonFanoEncode(InputText);
+        }
+        else if (SelectedAlgorithm == "Huffman")
+        {
+            (ResultText, TreeVisualization) = HuffmanEncode(InputText);
         }
     }
 
-    private int GetMatrixValue(int row, int col)
+    private async Task SaveToFile()
     {
-        if (row >= 0 && row < AdjacencyMatrix.Count && col >= 0 && col < AdjacencyMatrix[row].Count)
+        if (string.IsNullOrWhiteSpace(ResultText))
         {
-            return AdjacencyMatrix[row][col];
+            return;
+        }
+
+        var fileName = $"{SelectedAlgorithm}_result.txt";
+        await JS.InvokeVoidAsync("saveFile", fileName, ResultText);
+    }
+
+    private (string, string) ShannonFanoEncode(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+        {
+            return ("", "Входной текст пуст.");
+        }
+
+        // Считаем частоты символов
+        var frequencies = input.GroupBy(c => c)
+            .ToDictionary(g => g.Key, g => g.Count())
+            .OrderByDescending(x => x.Value);
+
+        // Построение кодов
+        var codes = new Dictionary<char, string>();
+        BuildShannonFanoCodes(frequencies.ToList(), codes, "");
+
+        // Кодируем текст
+        var encodedText = string.Concat(input.Select(c => codes[c]));
+
+        // Генерация дерева в строковом формате
+        var tree = string.Join(Environment.NewLine, codes.Select(kvp => $"{kvp.Key}: {kvp.Value}"));
+
+        EncodingKeys = new Dictionary<char, string>();
+        BuildShannonFanoCodes(frequencies.ToList(), EncodingKeys, "");
+        DecodingKeys = EncodingKeys.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+
+        return (encodedText, tree);
+    }
+
+    private void BuildShannonFanoCodes(List<KeyValuePair<char, int>> frequencies, Dictionary<char, string> codes, string prefix)
+    {
+        if (frequencies.Count == 1)
+        {
+            codes[frequencies[0].Key] = prefix;
+            return;
+        }
+
+        // Разделение на две группы
+        int totalFrequency = frequencies.Sum(x => x.Value);
+        int halfFrequency = totalFrequency / 2;
+
+        int runningTotal = 0;
+        int splitIndex = 0;
+        for (int i = 0; i < frequencies.Count; i++)
+        {
+            runningTotal += frequencies[i].Value;
+            if (runningTotal >= halfFrequency)
+            {
+                splitIndex = i + 1;
+                break;
+            }
+        }
+
+        BuildShannonFanoCodes(frequencies.Take(splitIndex).ToList(), codes, prefix + "0");
+        BuildShannonFanoCodes(frequencies.Skip(splitIndex).ToList(), codes, prefix + "1");
+    }
+
+
+
+
+
+    private class Node
+    {
+        public char? Symbol { get; set; } // Символ (null для промежуточных узлов)
+        public int Frequency { get; set; } // Частота символа
+        public Node Left { get; set; } // Левый потомок
+        public Node Right { get; set; } // Правый потомок
+        public Guid Id { get; } = Guid.NewGuid(); // Уникальный идентификатор узла
+    }
+
+    public (string EncodedText, string TreeRepresentation) HuffmanEncode(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+        {
+            throw new ArgumentException("Входной текст пуст.");
+        }
+
+        // Подсчёт частот символов
+        var frequencies = input.GroupBy(c => c)
+                               .ToDictionary(g => g.Key, g => g.Count());
+
+        // Очередь с приоритетами
+        var priorityQueue = new SortedSet<Node>(Comparer<Node>.Create((a, b) =>
+        {
+            int freqCompare = a.Frequency.CompareTo(b.Frequency);
+            if (freqCompare != 0) return freqCompare;
+
+            return a.Id.CompareTo(b.Id); // Уникальное сравнение
+        }));
+
+        foreach (var kvp in frequencies)
+        {
+            priorityQueue.Add(new Node { Symbol = kvp.Key, Frequency = kvp.Value });
+        }
+
+        // Построение дерева Хаффмана
+        while (priorityQueue.Count > 1)
+        {
+            var left = priorityQueue.Min;
+            priorityQueue.Remove(left);
+            var right = priorityQueue.Min;
+            priorityQueue.Remove(right);
+
+            var parent = new Node
+                {
+                    Frequency = left.Frequency + right.Frequency,
+                    Left = left,
+                    Right = right,
+                    Symbol = null // Промежуточный узел не имеет символа
+                };
+
+            priorityQueue.Add(parent);
+        }
+
+        var root = priorityQueue.Min; // Корень дерева
+
+        // Генерация кодов
+        EncodingKeys = new Dictionary<char, string>();
+        GenerateHuffmanCodes(root, "", EncodingKeys);
+
+        // Обратные ключи для декодирования
+        DecodingKeys = EncodingKeys.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+
+        // Кодирование текста
+        var encodedText = string.Concat(input.Select(c => EncodingKeys[c]));
+
+        // Построение дерева для отображения
+        string treeRepresentation = GetTreeRepresentation(root);
+
+        return (encodedText, treeRepresentation);
+    }
+
+
+    private void GenerateHuffmanCodes(Node node, string code, Dictionary<char, string> codes)
+    {
+        if (node == null) return;
+
+        // Если узел — это лист
+        if (node.Left == null && node.Right == null && node.Symbol.HasValue)
+        {
+            codes[node.Symbol.Value] = code;
+            return;
+        }
+
+        GenerateHuffmanCodes(node.Left, code + "0", codes);
+        GenerateHuffmanCodes(node.Right, code + "1", codes);
+    }
+
+    private string GetTreeRepresentation(Node node, string indent = "", bool isLast = true, Dictionary<char, string> codes = null)
+    {
+        if (node == null) return "";
+
+        string result = $"{indent}{(isLast ? "└──" : "├──")}";
+
+        string code = "";
+        if (codes != null && node.Symbol.HasValue)
+        {
+            if (codes.TryGetValue(node.Symbol.Value, out code))
+            {
+                // Add code to the output
+                result += $"'{node.Symbol}' ({node.Frequency}): {code}\n";
+            }
+            else
+            {
+                result += $"'{node.Symbol}' ({node.Frequency})\n"; // Handle cases where the symbol might not be in the codes dictionary
+            }
         }
         else
         {
-            return 0;
+            result += $"* ({node.Frequency})\n";
         }
+
+
+
+        indent += isLast ? "    " : "│   ";
+
+        result += GetTreeRepresentation(node.Left, indent, false, codes);
+        result += GetTreeRepresentation(node.Right, indent, true, codes);
+
+        return result;
     }
 
-    private void UpdateMatrix(int row, int col, bool value)
+
+    private void Decode()
     {
-        if (row >= 0 && row < AdjacencyMatrix.Count && col >= 0 && col < AdjacencyMatrix[row].Count)
+        if (string.IsNullOrEmpty(InputText) || DecodingKeys.Count == 0)
         {
-            AdjacencyMatrix[row][col] = value ? 1 : 0;
+            ResultText = "Введите сжатый текст и загрузите ключи!";
+            return;
         }
+
+        // Преобразуем входной текст в последовательность бит
+        var bitSequence = ConvertTextToBits(InputText);
+
+        var decodedText = new StringBuilder();
+        var currentCode = string.Empty;
+
+        foreach (var bit in bitSequence)
+        {
+            currentCode += bit;
+            if (DecodingKeys.TryGetValue(currentCode, out var symbol))
+            {
+                decodedText.Append(symbol);
+                currentCode = string.Empty;
+            }
+        }
+
+        ResultText = decodedText.ToString();
     }
 
-    private async Task GenerateGraph()
+
+    private async Task LoadKeysFromFile(InputFileChangeEventArgs e)
     {
-        Graph = new List<List<int>>();
-        EdgeWeights = new List<List<int>>();
+        var file = e.File;
+        if (file == null) return;
 
-        Random random = new Random();
-        for (int i = 0; i < GraphSize; i++)
-        {
-            Graph.Add(new List<int>());
-            EdgeWeights.Add(new List<int>());
-            for (int j = 0; j < GraphSize; j++)
-            {
-                EdgeWeights[i].Add(0);
-            }
+        using var stream = file.OpenReadStream();
+        using var reader = new StreamReader(stream);
+        var keysContent = await reader.ReadToEndAsync();
 
-        }
-
-        for (int i = 0; i < GraphSize; i++)
-        {
-            for (int j = i + 1; j < GraphSize; j++)
-            {
-                if (random.Next(2) == 0)
-                {
-                    Graph[i].Add(j);
-                    Graph[j].Add(i);
-                    int weight = random.Next(1, 11); // Вес от 1 до 10
-                    EdgeWeights[i][j] = weight;
-                    EdgeWeights[j][i] = weight;
-                }
-            }
-        }
-
-
-        await InvokeGraphDraw();
+        DecodingKeys = keysContent
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .ToDictionary(
+                line => line.Split(':')[1],
+                line => line.Split(':')[0][0]);
     }
 
-    private async Task SaveMatrix()
+    private async Task SaveKeysToFile()
     {
-        Graph = new List<List<int>>();
-        for (int i = 0; i < MatrixSize; i++)
+        if (EncodingKeys.Count == 0)
         {
-            Graph.Add(new List<int>());
-            for (int j = 0; j < MatrixSize; j++)
-            {
-                if (AdjacencyMatrix[i][j] != 0)
-                {
-                    Graph[i].Add(j);
-                }
-            }
+            return;
         }
-        await InvokeGraphDraw();
+
+        var keysContent = string.Join(Environment.NewLine, EncodingKeys.Select(kvp => $"{kvp.Key}:{kvp.Value}"));
+        await JS.InvokeVoidAsync("saveFile", "keys.txt", keysContent);
     }
 
-    private async Task InvokeGraphDraw()
+    private async Task SaveBitSequenceAsText()
     {
-        var nodes = Graph.Select((adj, i) => new { id = (i + 1).ToString() }).ToArray();
-        var edges = new List<object>();
-        for (int i = 0; i < Graph.Count; i++)
+        if (string.IsNullOrEmpty(ResultText))
         {
-            foreach (var j in Graph[i])
-            {
-                if (i < j)
-                {
-                    edges.Add(new { source = (i + 1).ToString(), target = (j + 1).ToString(), weight = EdgeWeights[i][j] }); // Include weight here.
-                }
-            }
+            ResultText = "Нет данных для сохранения!";
+            return;
         }
 
-        await JS.InvokeVoidAsync("drawGraph", nodes, edges);
+        // Преобразуем биты в текст
+        var bitSequence = ConvertBitsToText(ResultText);
+
+        var fileName = Mode == "Encoding" ? "encoded_as_text.txt" : "decoded_as_text.txt";
+        await JS.InvokeVoidAsync("saveFile", fileName, bitSequence);
     }
 
-        private void RunDijkstra()
+    private string ConvertBitsToText(string bitSequence)
+    {
+        var builder = new StringBuilder();
+
+        for (int i = 0; i < bitSequence.Length; i += 8)
         {
-            DijkstraResult = Dijkstra(Graph, EdgeWeights, StartVertex - 1);
+            var byteStr = bitSequence.Substring(i, Math.Min(8, bitSequence.Length - i));
+            byteStr = byteStr.PadRight(8, '0'); // Дополняем нулями, если меньше 8 бит
+            var symbol = (char)Convert.ToInt32(byteStr, 2);
+            builder.Append(symbol);
         }
 
-        private void RunFloydWarshall()
+        return builder.ToString();
+    }
+
+    private string ConvertTextToBits(string text)
+    {
+        var builder = new StringBuilder();
+
+        foreach (var symbol in text)
         {
-            FloydWarshallResult = FloydWarshall(Graph, EdgeWeights);
+            var byteValue = (byte)symbol; // Преобразуем символ в его байтовое представление
+            var bitString = Convert.ToString(byteValue, 2).PadLeft(8, '0'); // Преобразуем в строку бит, дополняя до 8 бит
+            builder.Append(bitString);
         }
 
+        return builder.ToString();
+    }
 
-        private int[] Dijkstra(List<List<int>> graph, List<List<int>> weights, int startNode)
-        {
-            int n = graph.Count;
-            int[] dist = Enumerable.Repeat(int.MaxValue, n).ToArray();
-            bool[] visited = new bool[n];
-            dist[startNode] = 0;
-
-            for (int count = 0; count < n - 1; count++)
-            {
-                int minDist = int.MaxValue, minIndex = -1;
-                for (int v = 0; v < n; v++)
-                {
-                    if (!visited[v] && dist[v] <= minDist)
-                    {
-                        minDist = dist[v];
-                        minIndex = v;
-                    }
-                }
-
-
-                if (minIndex == -1) break;
-                visited[minIndex] = true;
-
-
-                for (int v = 0; v < graph[minIndex].Count; v++)
-                {
-                    int neighbor = graph[minIndex][v];
-
-                    int weight = weights[minIndex][neighbor];
-
-                    if (!visited[neighbor] && dist[minIndex] != int.MaxValue &&
-                    dist[minIndex] + weight < dist[neighbor])
-
-                        dist[neighbor] = dist[minIndex] + weight;
-
-
-                }
-            }
-
-
-            return dist;
-
-
-        }
-
-        private int[,] FloydWarshall(List<List<int>> graph, List<List<int>> weights)
-        {
-
-            int n = graph.Count;
-
-            int[,] dist = new int[n, n];
-
-            for (int i = 0; i < n; i++)
-
-                for (int j = 0; j < n; j++)
-
-                { dist[i, j] = (i == j) ? 0 : int.MaxValue; }
-
-
-
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < graph[i].Count; j++)
-                {
-                    int neighbor = graph[i][j];
-
-                    dist[i, neighbor] = weights[i][neighbor];
-                }
-            }
-
-
-            for (int k = 0; k < n; k++)
-            {
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        if (dist[i, k] != int.MaxValue && dist[k, j] != int.MaxValue &&
-                            dist[i, k] + dist[k, j] < dist[i, j])
-                        {
-                            dist[i, j] = dist[i, k] + dist[k, j];
-                        }
-                    }
-                }
-            }
-
-
-
-            return dist;
-        }
 }
